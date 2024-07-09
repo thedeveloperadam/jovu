@@ -13,16 +13,31 @@ import * as graphql from "@nestjs/graphql";
 import { GraphQLError } from "graphql";
 import { isRecordNotFoundError } from "../../prisma.util";
 import { MetaQueryPayload } from "../../util/MetaQueryPayload";
+import * as nestAccessControl from "nest-access-control";
+import * as gqlACGuard from "../../auth/gqlAC.guard";
+import { GqlDefaultAuthGuard } from "../../auth/gqlDefaultAuth.guard";
+import * as common from "@nestjs/common";
+import { AclFilterResponseInterceptor } from "../../interceptors/aclFilterResponse.interceptor";
 import { Tweet } from "./Tweet";
 import { TweetCountArgs } from "./TweetCountArgs";
 import { TweetFindManyArgs } from "./TweetFindManyArgs";
 import { TweetFindUniqueArgs } from "./TweetFindUniqueArgs";
 import { DeleteTweetArgs } from "./DeleteTweetArgs";
 import { TweetService } from "../tweet.service";
+@common.UseGuards(GqlDefaultAuthGuard, gqlACGuard.GqlACGuard)
 @graphql.Resolver(() => Tweet)
 export class TweetResolverBase {
-  constructor(protected readonly service: TweetService) {}
+  constructor(
+    protected readonly service: TweetService,
+    protected readonly rolesBuilder: nestAccessControl.RolesBuilder
+  ) {}
 
+  @graphql.Query(() => MetaQueryPayload)
+  @nestAccessControl.UseRoles({
+    resource: "Tweet",
+    action: "read",
+    possession: "any",
+  })
   async _tweetsMeta(
     @graphql.Args() args: TweetCountArgs
   ): Promise<MetaQueryPayload> {
@@ -32,12 +47,24 @@ export class TweetResolverBase {
     };
   }
 
+  @common.UseInterceptors(AclFilterResponseInterceptor)
   @graphql.Query(() => [Tweet])
+  @nestAccessControl.UseRoles({
+    resource: "Tweet",
+    action: "read",
+    possession: "any",
+  })
   async tweets(@graphql.Args() args: TweetFindManyArgs): Promise<Tweet[]> {
     return this.service.tweets(args);
   }
 
+  @common.UseInterceptors(AclFilterResponseInterceptor)
   @graphql.Query(() => Tweet, { nullable: true })
+  @nestAccessControl.UseRoles({
+    resource: "Tweet",
+    action: "read",
+    possession: "own",
+  })
   async tweet(
     @graphql.Args() args: TweetFindUniqueArgs
   ): Promise<Tweet | null> {
@@ -49,6 +76,11 @@ export class TweetResolverBase {
   }
 
   @graphql.Mutation(() => Tweet)
+  @nestAccessControl.UseRoles({
+    resource: "Tweet",
+    action: "delete",
+    possession: "any",
+  })
   async deleteTweet(
     @graphql.Args() args: DeleteTweetArgs
   ): Promise<Tweet | null> {
